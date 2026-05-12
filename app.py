@@ -5,130 +5,133 @@ from datetime import datetime, timedelta
 import urllib.parse
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
-st.set_page_config(page_title="Radar PNCP Pro", layout="wide", page_icon="🏛️")
+st.set_page_config(page_title="Radar PNCP SaaS", layout="wide", page_icon="🏛️")
 
-# --- ESTILIZAÇÃO CUSTOMIZADA (CSS) ---
+# --- ESTILIZAÇÃO CSS ---
 st.markdown("""
     <style>
-    .licitacao-card {
-        padding: 20px;
-        border-radius: 10px;
-        border: 1px solid #e6e9ef;
-        margin-bottom: 20px;
-        background-color: #f8f9fa;
+    .card {
+        padding: 1.5rem;
+        border-radius: 0.5rem;
+        background-color: #ffffff;
+        border: 1px solid #e0e0e0;
+        margin-bottom: 1rem;
     }
-    .status-badge {
-        background-color: #ff4b4b;
-        color: white;
-        padding: 2px 8px;
+    .data-box {
+        background-color: #f1f3f5;
+        padding: 10px;
         border-radius: 5px;
-        font-size: 12px;
+        text-align: center;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- LÓGICA DE BUSCA ---
+# --- FUNÇÃO DE BUSCA CORRIGIDA ---
 def buscar_pncp(termo, modalidades, data_alvo, uf):
     url = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao"
-    params = {
-        "pagina": 1,
-        "tamanhoPagina": 50,
-        "dataInicial": data_alvo,
-        "dataFinal": data_alvo,
-        "codigoModalidadeContratacao": modalidades,
-        "termoBusca": termo,
-        "uf": uf if uf else None
-    }
+    
+    # Construção manual dos parâmetros para garantir que modalidades múltiplas funcionem
+    # A API do PNCP exige repetição da chave para listas
+    params = [
+        ('pagina', 1),
+        ('tamanhoPagina', 50),
+        ('dataInicial', data_alvo),
+        ('dataFinal', data_alvo),
+    ]
+    
+    if termo:
+        params.append(('termoBusca', termo))
+    if uf:
+        params.append(('uf', uf))
+    
+    # Adiciona cada modalidade individualmente (Resolve o problema de trazer apenas uma)
+    for mod in modalidades:
+        params.append(('codigoModalidadeContratacao', mod))
+
     try:
-        res = requests.get(url, params=params, timeout=20)
+        # Usamos 'params=params' onde params é uma lista de tuplas para chaves repetidas
+        res = requests.get(url, params=params, timeout=25)
         res.raise_for_status()
         return res.json().get("data", [])
-    except:
+    except Exception as e:
+        st.error(f"Erro na API: {e}")
         return []
 
-def formatar_data_br(dt_str):
+def formatar_data(dt_str):
     if not dt_str: return None
     try:
         return datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
     except:
         return None
 
-# --- GERADOR DE LINK GOOGLE CALENDAR ---
-def gerar_link_google_calendar(titulo, objeto, data_fim, url_edital):
-    # Se não houver data fim, agendamos para 1h após a abertura ou momento atual
+def gerar_link_google(titulo, objeto, data_fim, link):
     if not data_fim:
-        data_fim = datetime.now() + timedelta(hours=1)
+        data_fim = datetime.now() + timedelta(days=1)
     
     data_fmt = data_fim.strftime("%Y%m%dT%H%M%SZ")
-    base_url = "https://www.google.com/calendar/render?action=TEMPLATE"
-    detalhes = f"Objeto: {objeto}\n\nLink: {url_edital}"
     params = {
-        "text": f"📌 PRAZO: {titulo[:50]}...",
+        "action": "TEMPLATE",
+        "text": f"🚨 PRAZO: {titulo[:50]}",
         "dates": f"{data_fmt}/{data_fmt}",
-        "details": detalhes,
-        "sf": "true",
-        "output": "xml"
+        "details": f"Objeto: {objeto}\n\nLink: {link}",
+        "sf": "true"
     }
-    return base_url + "&" + urllib.parse.urlencode(params)
+    return "https://www.google.com/calendar/render?" + urllib.parse.urlencode(params)
 
 # --- INTERFACE ---
-st.title("🏛️ Radar de Oportunidades PNCP")
-st.caption("Versão Cloud - Filtre por região e agende no seu Google Calendar")
+st.title("🏛️ Radar de Licitações PNCP")
+st.markdown("Busque editais em tempo real e agende prazos no seu calendário.")
 
 # Sidebar
 st.sidebar.header("Filtros")
-termo = st.sidebar.text_input("Palavra-chave (ex: TI, Limpeza)")
-uf_sel = st.sidebar.selectbox("Estado (UF)", ["", "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"])
-data_sel = st.sidebar.date_input("Data de Publicação", datetime.now())
+termo_input = st.sidebar.text_input("Termo de busca", placeholder="Ex: TI, Limpeza, Software")
+uf_input = st.sidebar.selectbox("Estado (UF)", ["", "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"])
+data_input = st.sidebar.date_input("Data da Publicação", datetime.now())
+
+st.sidebar.subheader("Modalidades")
 m6 = st.sidebar.checkbox("Dispensa (6)", value=True)
 m8 = st.sidebar.checkbox("Pregão (8)", value=True)
 
-if st.sidebar.button("🔍 Iniciar Busca"):
-    modalidades = []
-    if m6: modalidades.append(6)
-    if m8: modalidades.append(8)
+if st.sidebar.button("🔍 Pesquisar Agora", use_container_width=True):
+    modalidades_list = []
+    if m6: modalidades_list.append(6)
+    if m8: modalidades_list.append(8)
     
-    with st.spinner("Extraindo dados do PNCP..."):
-        dados = buscar_pncp(termo, modalidades, data_sel.strftime("%Y%m%d"), uf_sel)
-        
-        if dados:
-            st.write(f"### Encontradas {len(dados)} oportunidades")
+    if not modalidades_list:
+        st.warning("Selecione ao menos uma modalidade.")
+    else:
+        with st.spinner("Sincronizando com o Portal Nacional..."):
+            resultados = buscar_pncp(termo_input, modalidades_list, data_input.strftime("%Y%m%d"), uf_input)
             
-            for index, item in enumerate(dados):
-                orgao = item['orgaoEntidade']['razaoSocial']
-                objeto = item['objetoCompra']
-                link_edital = f"https://pncp.gov.br/app/editais/{item['orgaoEntidade']['cnpj']}/{item['anoCompra']}/{item['sequencialCompra']}"
-                plataforma = item.get('nomeFonteSincronizacao', 'PNCP')
-                modalidade_nome = item.get('modalidadeNome', 'N/A')
+            if resultados:
+                st.write(f"### Foram encontradas {len(resultados)} oportunidades")
                 
-                # Datas
-                dt_pub = formatar_data_br(item.get('dataPublicacao'))
-                dt_abert = formatar_data_br(item.get('dataAberturaPropostas'))
-                dt_fim = formatar_data_br(item.get('dataEncerramentoPropostas'))
-
-                # Renderização do Card sem Expander
-                with st.container():
-                    st.markdown(f"#### 🏢 {orgao}")
+                for item in resultados:
+                    orgao = item['orgaoEntidade']['razaoSocial']
+                    objeto = item['objetoCompra']
+                    link = f"https://pncp.gov.br/app/editais/{item['orgaoEntidade']['cnpj']}/{item['anoCompra']}/{item['sequencialCompra']}"
+                    dt_fim = formatar_data(item.get('dataEncerramentoPropostas'))
                     
-                    col_info, col_btn = st.columns([4, 1])
+                    # Card Visual
+                    st.markdown(f"""
+                    <div class="card">
+                        <h4>🏢 {orgao}</h4>
+                        <p><strong>📝 Objeto:</strong> {objeto}</p>
+                        <p><strong>⚖️ Modalidade:</strong> {item.get('modalidadeNome')} | <strong>🌐 Plataforma:</strong> {item.get('nomeFonteSincronizacao')}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
                     
-                    with col_info:
-                        st.write(f"**📝 Objeto:** {objeto}")
-                        st.write(f"**⚖️ Modalidade:** {modalidade_nome} | **🌐 Plataforma:** {plataforma}")
-                        
-                        # Linha de Datas
-                        c1, c2, c3 = st.columns(3)
-                        c1.write(f"📅 **Publicação:**\n{dt_pub.strftime('%d/%m/%Y') if dt_pub else '-'}")
-                        c2.write(f"🚀 **Abertura:**\n{dt_abert.strftime('%d/%m/%Y %H:%M') if dt_abert else '-'}")
-                        c3.markdown(f"⌛ **Encerramento:**\n<span style='color:red; font-weight:bold;'>{dt_fim.strftime('%d/%m/%Y %H:%M') if dt_fim else 'Não informado'}</span>", unsafe_allow_html=True)
-                    
-                    with col_btn:
-                        st.link_button("📄 Ver Edital", link_edital, use_container_width=True)
-                        
-                        # Geração do Botão de Agendar
-                        link_google = gerar_link_google_calendar(orgao, objeto, dt_fim, link_edital)
-                        st.link_button("📅 Agendar Google", link_google, use_container_width=True, type="primary")
+                    c1, c2, c3 = st.columns([1, 1, 1])
+                    with c1:
+                        st.info(f"🚀 Abertura: {formatar_data(item.get('dataAberturaPropostas')).strftime('%d/%m/%Y %H:%M') if item.get('dataAberturaPropostas') else '-'}")
+                    with c2:
+                        st.error(f"⌛ Encerramento: {dt_fim.strftime('%d/%m/%Y %H:%M') if dt_fim else 'Não informado'}")
+                    with c3:
+                        sub_c1, sub_c2 = st.columns(2)
+                        sub_c1.link_button("📄 Edital", link, use_container_width=True)
+                        link_google = gerar_link_google(orgao, objeto, dt_fim, link)
+                        sub_c2.link_button("📅 Agendar", link_google, use_container_width=True, type="primary")
                     
                     st.divider()
-        else:
-            st.info("Nenhuma oportunidade encontrada para os filtros aplicados.")
+            else:
+                st.info("Nenhum resultado encontrado. Tente mudar o termo ou a data.")

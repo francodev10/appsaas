@@ -5,33 +5,65 @@ from datetime import datetime, timedelta
 import urllib.parse
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
-st.set_page_config(page_title="Radar PNCP SaaS", layout="wide", page_icon="🏛️")
+st.set_page_config(page_title="Radar PNCP SaaS", layout="wide")
 
-# --- ESTILIZAÇÃO CSS ---
+# --- CUSTOMIZAÇÃO ESTÉTICA (CSS) ---
+# Fundo preto, letras amarelas e fontes menores
 st.markdown("""
     <style>
-    .card {
-        padding: 1.5rem;
-        border-radius: 0.5rem;
-        background-color: #ffffff;
-        border: 1px solid #e0e0e0;
-        margin-bottom: 1rem;
+    /* Fundo principal e Sidebar */
+    .stApp, [data-testid="stSidebar"] {
+        background-color: #000000 !important;
+        color: #FFFF00 !important;
     }
-    .data-box {
-        background-color: #f1f3f5;
+    
+    /* Textos, Títulos e Labels */
+    h1, h2, h3, h4, p, span, label, .stMarkdown {
+        color: #FFFF00 !important;
+        font-size: 14px !important;
+    }
+    
+    /* Inputs e Selectboxes */
+    .stTextInput input, .stSelectbox div, .stDateInput input {
+        background-color: #111 !important;
+        color: #FFFF00 !important;
+        border: 1px solid #FFFF00 !important;
+        font-size: 13px !important;
+    }
+
+    /* Cards de Licitação */
+    .licitacao-box {
+        border: 1px solid #FFFF00;
         padding: 10px;
+        margin-bottom: 15px;
         border-radius: 5px;
-        text-align: center;
+    }
+
+    /* Botões */
+    .stButton button {
+        background-color: #000 !important;
+        color: #FFFF00 !important;
+        border: 1px solid #FFFF00 !important;
+        width: 100%;
+        font-size: 12px !important;
+    }
+    .stButton button:hover {
+        background-color: #FFFF00 !important;
+        color: #000 !important;
+    }
+
+    /* Links de botões (Ver Edital e Agendar) */
+    a {
+        text-decoration: none;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- FUNÇÃO DE BUSCA CORRIGIDA ---
+# --- FUNÇÃO DE BUSCA (Lógica de Múltiplas Modalidades) ---
 def buscar_pncp(termo, modalidades, data_alvo, uf):
     url = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao"
     
-    # Construção manual dos parâmetros para garantir que modalidades múltiplas funcionem
-    # A API do PNCP exige repetição da chave para listas
+    # Lista de tuplas para permitir chaves repetidas na URL (Necessário para a API PNCP)
     params = [
         ('pagina', 1),
         ('tamanhoPagina', 50),
@@ -44,17 +76,14 @@ def buscar_pncp(termo, modalidades, data_alvo, uf):
     if uf:
         params.append(('uf', uf))
     
-    # Adiciona cada modalidade individualmente (Resolve o problema de trazer apenas uma)
     for mod in modalidades:
         params.append(('codigoModalidadeContratacao', mod))
 
     try:
-        # Usamos 'params=params' onde params é uma lista de tuplas para chaves repetidas
         res = requests.get(url, params=params, timeout=25)
         res.raise_for_status()
         return res.json().get("data", [])
-    except Exception as e:
-        st.error(f"Erro na API: {e}")
+    except:
         return []
 
 def formatar_data(dt_str):
@@ -67,71 +96,63 @@ def formatar_data(dt_str):
 def gerar_link_google(titulo, objeto, data_fim, link):
     if not data_fim:
         data_fim = datetime.now() + timedelta(days=1)
-    
     data_fmt = data_fim.strftime("%Y%m%dT%H%M%SZ")
     params = {
         "action": "TEMPLATE",
-        "text": f"🚨 PRAZO: {titulo[:50]}",
+        "text": f"PNCP: {titulo[:40]}",
         "dates": f"{data_fmt}/{data_fmt}",
-        "details": f"Objeto: {objeto}\n\nLink: {link}",
+        "details": f"Objeto: {objeto}\nLink: {link}",
         "sf": "true"
     }
     return "https://www.google.com/calendar/render?" + urllib.parse.urlencode(params)
 
 # --- INTERFACE ---
-st.title("🏛️ Radar de Licitações PNCP")
-st.markdown("Busque editais em tempo real e agende prazos no seu calendário.")
+st.title("RADAR PNCP - MODO TERMINAL")
 
 # Sidebar
-st.sidebar.header("Filtros")
-termo_input = st.sidebar.text_input("Termo de busca", placeholder="Ex: TI, Limpeza, Software")
-uf_input = st.sidebar.selectbox("Estado (UF)", ["", "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"])
-data_input = st.sidebar.date_input("Data da Publicação", datetime.now())
+st.sidebar.markdown("### FILTROS")
+termo_input = st.sidebar.text_input("BUSCA")
+uf_input = st.sidebar.selectbox("UF", ["", "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"])
+data_input = st.sidebar.date_input("DATA", datetime.now())
 
-st.sidebar.subheader("Modalidades")
-m6 = st.sidebar.checkbox("Dispensa (6)", value=True)
-m8 = st.sidebar.checkbox("Pregão (8)", value=True)
+m6 = st.sidebar.checkbox("DISPENSA (6)", value=True)
+m8 = st.sidebar.checkbox("PREGÃO (8)", value=True)
 
-if st.sidebar.button("🔍 Pesquisar Agora", use_container_width=True):
-    modalidades_list = []
-    if m6: modalidades_list.append(6)
-    if m8: modalidades_list.append(8)
+if st.sidebar.button("EXECUTAR BUSCA"):
+    mods = []
+    if m6: mods.append(6)
+    if m8: mods.append(8)
     
-    if not modalidades_list:
-        st.warning("Selecione ao menos uma modalidade.")
-    else:
-        with st.spinner("Sincronizando com o Portal Nacional..."):
-            resultados = buscar_pncp(termo_input, modalidades_list, data_input.strftime("%Y%m%d"), uf_input)
+    with st.spinner("CARREGANDO..."):
+        resultados = buscar_pncp(termo_input, mods, data_input.strftime("%Y%m%d"), uf_input)
+        
+        if resultados:
+            st.markdown(f"RESULTADOS: {len(resultados)}")
             
-            if resultados:
-                st.write(f"### Foram encontradas {len(resultados)} oportunidades")
+            for item in resultados:
+                orgao = item['orgaoEntidade']['razaoSocial']
+                objeto = item['objetoCompra']
+                link = f"https://pncp.gov.br/app/editais/{item['orgaoEntidade']['cnpj']}/{item['anoCompra']}/{item['sequencialCompra']}"
+                dt_fim = formatar_data(item.get('dataEncerramentoPropostas'))
+                dt_abert = formatar_data(item.get('dataAberturaPropostas'))
+
+                # Card de Informação com estilo "Terminal"
+                st.markdown(f"""
+                <div class="licitacao-box">
+                    <strong>ORGÃO:</strong> {orgao}<br>
+                    <strong>OBJETO:</strong> {objeto}<br>
+                    <strong>ABERTURA:</strong> {dt_abert.strftime('%d/%m/%Y %H:%M') if dt_abert else '---'} | 
+                    <strong>FIM:</strong> {dt_fim.strftime('%d/%m/%Y %H:%M') if dt_fim else '---'}
+                </div>
+                """, unsafe_allow_html=True)
                 
-                for item in resultados:
-                    orgao = item['orgaoEntidade']['razaoSocial']
-                    objeto = item['objetoCompra']
-                    link = f"https://pncp.gov.br/app/editais/{item['orgaoEntidade']['cnpj']}/{item['anoCompra']}/{item['sequencialCompra']}"
-                    dt_fim = formatar_data(item.get('dataEncerramentoPropostas'))
-                    
-                    # Card Visual
-                    st.markdown(f"""
-                    <div class="card">
-                        <h4>🏢 {orgao}</h4>
-                        <p><strong>📝 Objeto:</strong> {objeto}</p>
-                        <p><strong>⚖️ Modalidade:</strong> {item.get('modalidadeNome')} | <strong>🌐 Plataforma:</strong> {item.get('nomeFonteSincronizacao')}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    c1, c2, c3 = st.columns([1, 1, 1])
-                    with c1:
-                        st.info(f"🚀 Abertura: {formatar_data(item.get('dataAberturaPropostas')).strftime('%d/%m/%Y %H:%M') if item.get('dataAberturaPropostas') else '-'}")
-                    with c2:
-                        st.error(f"⌛ Encerramento: {dt_fim.strftime('%d/%m/%Y %H:%M') if dt_fim else 'Não informado'}")
-                    with c3:
-                        sub_c1, sub_c2 = st.columns(2)
-                        sub_c1.link_button("📄 Edital", link, use_container_width=True)
-                        link_google = gerar_link_google(orgao, objeto, dt_fim, link)
-                        sub_c2.link_button("📅 Agendar", link_google, use_container_width=True, type="primary")
-                    
-                    st.divider()
-            else:
-                st.info("Nenhum resultado encontrado. Tente mudar o termo ou a data.")
+                col1, col2, _ = st.columns([1, 1, 2])
+                with col1:
+                    st.link_button("EDITAL", link)
+                with col2:
+                    url_cal = gerar_link_google(orgao, objeto, dt_fim, link)
+                    st.link_button("AGENDAR", url_cal)
+                
+                st.markdown("---")
+        else:
+            st.markdown("NENHUM DADO ENCONTRADO.")
